@@ -16,6 +16,7 @@ from keras.regularizers import l2, l1_l2
 class DeepRecommender(ClassifierWithTransferLearningKerasModelTraining):
     input_shape: Tuple[int, int] = luigi.TupleParameter(default=(100,))
     batch_size: int = luigi.IntParameter(default=10)
+    emb_size:  int = luigi.IntParameter(default=10)
     learning_rate = luigi.FloatParameter(default=1e-5)
     dense_layers: List[int] = luigi.ListParameter(default=[512, 512])
     dropout: float = luigi.FloatParameter(default=None)
@@ -34,13 +35,12 @@ class DeepRecommender(ClassifierWithTransferLearningKerasModelTraining):
 
         #  Build Imputs Embs + Cout
         embeddings_tensors = []
-        n_factors = 5
         reg       = 1e-3
 
         for ec in DeepRecommender.EMBEDDINGS_COLS:
             layer_name = ec + '_inp'
             t_inp, t_build = self.embedding_input(
-                layer_name, unique_vals[ec], n_factors, reg)
+                layer_name, unique_vals[ec], self.emb_size, reg)
             embeddings_tensors.append((t_inp, t_build))
             del(t_inp, t_build)
 
