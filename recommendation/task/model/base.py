@@ -340,11 +340,10 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
         pass
 
     def create_model(self) -> KerasModel:
-        self.base_model = self.create_base_model()
+        self.base_model  = self.create_base_model()
 
-        for layer in self.base_model.layers[:self.frozen_layers]:
-            layer.trainable = False
-
+        #for layer in self.base_model.layers[:self.frozen_layers]:
+        #    layer.trainable = False
         self.keras_model = self.create_model_with(self.base_model)
 
         return self.keras_model

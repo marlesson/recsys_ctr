@@ -22,14 +22,15 @@ class MLPClassifier(ClassifierWithTransferLearningKerasModelTraining):
     def create_base_model(self) -> Model:
         x_input = Input(shape=self.input_shape)
 
-        dense   = Dense(self.dense_layers[0], activation=self.activation_function, kernel_initializer=self.kernel_initializer)(x_input)
-        for dense_neurons in self.dense_layers[1:-1]:
-            dense = Dense(dense_neurons, activation=self.activation_function, kernel_initializer=self.kernel_initializer)(dense)
+        mlp     = Dense(self.dense_layers[0], activation=self.activation_function, kernel_initializer=self.kernel_initializer)(x_input)
+        
+        for dense_neurons in self.dense_layers[1:]:
+            mlp = Dense(dense_neurons, activation=self.activation_function, kernel_initializer=self.kernel_initializer)(mlp)
             #model.add(BatchNormalization())
-            #model.add(Dropout(self.dropout))
+            if self.dropout:
+                mlp = Dropout(self.dropout)(mlp)
 
-            #model.add(BatchNormalization())
-        output = Dense(1, activation='sigmoid')(dense)
+        output = Dense(1, activation='sigmoid')(mlp)
         model  = Model(x_input, output, name='BaseMLP')
 
         return model
