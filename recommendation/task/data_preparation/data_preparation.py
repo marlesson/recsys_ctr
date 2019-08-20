@@ -1,3 +1,9 @@
+# Criteo AI Lab
+#
+# https://www.kaggle.com/c/criteo-display-ad-challenge
+# https://ailab.criteo.com/kaggle-contest-dataset-now-available-academic-use/
+#
+
 from typing import List, Tuple
 import luigi
 import os
@@ -16,6 +22,7 @@ SEED = 42
 DATASET_DIR = "output/dataset"
 
 TRAIN_FILE  = "ctr_criteo_labs_train_sample.txt"
+
 
 # class DownloadDataset(luigi.Task):
 #     def output(self):
@@ -52,6 +59,12 @@ TRAIN_FILE  = "ctr_criteo_labs_train_sample.txt"
 #             zip_ref.extractall(self.output().path)
 
 
+DATASET_COLUMNS = ['TARGET', 'I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'I10', 'I11', 'I12', 'I13',
+                    'C1', 'C2','C3','C4','C5','C6','C7','C8','C9','C10','C11','C12','C13','C14','C15','C16','C17',
+                    'C18','C19','C20','C21','C22','C23','C24','C25','C26']
+
+import category_encoders as ce
+
 class PrepareDataFrames(luigi.Task):
     val_size: float = luigi.FloatParameter(default=0.2)
     seed: int = luigi.IntParameter(default=42)
@@ -69,9 +82,23 @@ class PrepareDataFrames(luigi.Task):
                 luigi.LocalTarget(os.path.join(DATASET_DIR, "test.csv")))
 
     def run(self):
-        train_df = pd.read_csv(os.path.join(DATASET_DIR, TRAIN_FILE), sep='\t', header=None)
+        df = pd.read_csv(os.path.join(DATASET_DIR, TRAIN_FILE), sep='\t', header=None)
+        df.columns = DATASET_COLUMNS
+        
+        df = self.preprocess(df)
 
-        train_df, val_df = train_test_split(train_df, test_size=self.val_size, random_state=self.seed)
+        train_df, val_df = train_test_split(df, test_size=self.val_size, random_state=self.seed)
 
         train_df.to_csv(self.output()[0].path, sep=";", index=False)
         val_df.to_csv(self.output()[1].path, sep=";", index=False)
+
+
+    def preprocess(self, df):
+        print(df.info())
+        # encoder = ce.OneHotEncoder(cols=list(df.select_dtypes(include=['object']).columns),
+        #                             use_cat_names=True, drop_invariant=True )
+
+        encoder = ce.OrdinalEncoder(cols=list(df.select_dtypes(include=['object']).columns))
+        df_t    = encoder.fit_transform(df)
+
+        return df_t

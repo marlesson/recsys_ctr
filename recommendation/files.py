@@ -29,7 +29,7 @@ def get_history_path(task_dir: str) -> str:
 
 
 def get_history_plot_path(task_dir: str) -> str:
-    return os.path.join(task_dir, "history.jpg")
+    return os.path.join(task_dir, "history.png")
 
 
 def get_tensorboard_logdir(task_id: str) -> str:

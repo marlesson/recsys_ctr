@@ -202,8 +202,8 @@ class BaseKerasModelTraining(BaseModelTraining):
             self.keras_model.fit_generator(train_loader, steps_per_epoch=self.lr_find_iterations, epochs=1, verbose=1,
                                            callbacks=[lr_finder])
 
-            loss_per_lr_path = os.path.join(self.output_path, "loss_per_lr.jpg")
-            loss_derivatives_per_lr_path = os.path.join(self.output_path, "loss_derivatives_per_lr.jpg")
+            loss_per_lr_path = os.path.join(self.output_path, "loss_per_lr.png")
+            loss_derivatives_per_lr_path = os.path.join(self.output_path, "loss_derivatives_per_lr.png")
 
             plot_loss_per_lr(lr_finder.learning_rates, lr_finder.loss_values) \
                 .savefig(loss_per_lr_path)
@@ -236,10 +236,10 @@ class BaseKerasModelTraining(BaseModelTraining):
 
                     self.keras_model.fit(x = self.train_generator[0], 
                                          y =  self.train_generator[1],
-                                        epochs=self.epochs,
-                                        validation_data=self.val_generator,
-                                        verbose=1, 
-                                        callbacks=self._get_callbacks(self.keras_model))
+                                         epochs=self.epochs,
+                                         validation_data=self.val_generator,
+                                         verbose=1, 
+                                         callbacks=self._get_callbacks(self.keras_model))
                 except KeyboardInterrupt:
                     print("Finalizando o treinamento a pedido do usuário...")
 
@@ -275,18 +275,18 @@ class BaseKerasModelTraining(BaseModelTraining):
         return []
 
     def get_train_generator(self):
-        df = self.train_dataset
+        df   = self.train_dataset
         
-        df_Y   = df['0'] 
-        df_X = df.drop(['0'], axis=1)
+        df_Y = df['TARGET'] 
+        df_X = df.drop(['TARGET'], axis=1)
 
         return (df_X, df_Y)
 
     def get_val_generator(self):
-        df = self.val_dataset
+        df   = self.val_dataset
 
-        df_Y = df['0'] 
-        df_X = df.drop(['0'], axis=1)
+        df_Y = df['TARGET'] 
+        df_X = df.drop(['TARGET'], axis=1)
 
         return (df_X, df_Y)
 

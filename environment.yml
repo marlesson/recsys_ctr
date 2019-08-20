@@ -18,5 +18,6 @@ dependencies:
   - nltk
   - pip:
     - mlflow
+    - category_encoders
     - keras-metrics
     - diskcache
