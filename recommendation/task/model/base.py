@@ -67,10 +67,14 @@ class BaseModelTraining(luigi.Task):
     __metaclass__ = abc.ABCMeta
     device: str = luigi.ChoiceParameter(choices=["cpu", "cuda"], default=DEFAULT_DEVICE)
     training_type: str = luigi.ChoiceParameter(choices=["fit", "lr_find", "debug"], default="fit")
-    mode: str = luigi.ChoiceParameter(choices=["classification", "localization"], default="localization")
     lr_find_iterations: int = luigi.IntParameter(default=100)
 
+    mode: str = luigi.ChoiceParameter(choices=["classification"], default="classification")
+    
     val_size: float = luigi.FloatParameter(default=0.2)
+    seed: int = luigi.IntParameter(default=42)
+    no_cross_columns: bool = luigi.BoolParameter(default=False)
+
     input_shape: Tuple[int, int] = luigi.TupleParameter(default=(224, 224))
     not_use_multiprocessing: bool = luigi.BoolParameter(default=False)
     learning_rate: float = luigi.FloatParameter(1e-3)
@@ -85,10 +89,9 @@ class BaseModelTraining(luigi.Task):
     generator_max_queue_size: int = luigi.IntParameter(default=20)
     initial_weights_path = luigi.Parameter(default=None)
 
-    seed: int = luigi.IntParameter(default=42)
 
     def requires(self):
-        return [PrepareDataFrames(val_size=self.val_size, seed=self.seed)]
+        return [PrepareDataFrames(val_size=self.val_size, seed=self.seed, no_cross_columns=self.no_cross_columns)]
 
     def output(self):
         return luigi.LocalTarget(get_task_dir(self.__class__, self.task_id))
@@ -221,10 +224,9 @@ class BaseKerasModelTraining(BaseModelTraining):
                         if hasattr(layer, 'kernel_regularizer'):
                             layer.kernel_regularizer = KERAS_REGULARIZERS[self.kernel_regularizer](
                                 self.kernel_regularizer_value)
-                if self.mode == "classification":
-                    metrics = self._get_metrics() + ["acc", keras_metrics.precision(), keras_metrics.recall()]
-                else:
-                    metrics = self._get_metrics() + []
+
+                metrics = self._get_metrics() + ["acc", keras_metrics.precision(), keras_metrics.recall()]
+
                 self.keras_model.compile(optimizer=self._get_optimizer(), loss=self._get_loss_function(),
                                          metrics=metrics)
 
@@ -291,8 +293,12 @@ class BaseKerasModelTraining(BaseModelTraining):
         return (df_X, df_Y)
 
     def get_test_generator(self):
-        return ImageIterator(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, seed=self.seed)
+        df   = self.val_dataset
 
+        df_Y = df['TARGET'] 
+        df_X = df.drop(['TARGET'], axis=1)
+
+        return (df_X, df_Y)
     @property
     def train_generator(self):
         if not hasattr(self, "_train_generator"):
@@ -350,6 +356,9 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
 
     def after_train(self):
         model = self.get_trained_model()
+
+        self.generate_submission_file()
+
         # self.eval_thresholds(model)
         # test_probas = pred_probas_for_classifier(model, self.test_generator)
         # for score_threshold in self.score_thresholds_to_eval:
@@ -388,20 +397,25 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
     #         df.to_csv(os.path.join(self.output_path, "eval_thresholds.csv"), index=False)
     #         return df
 
+
+    # Id,Predicted
+    # 60000000,0.361366158048
+    # 60000001,0.619944481451
     def generate_submission_file(self, model: KerasModel = None, probas: np.ndarray = None, threshold=0.5):
-        pass
-        # with self.tensorflow_device:
-        #     if probas is None:
-        #         if model is None:
-        #             model = self.get_trained_model()
-        #         probas = pred_probas_for_classifier(model, self.test_generator)
+        with self.tensorflow_device:
+            if model is None:
+                model  = self.get_trained_model()
+                probas = pred_probas_for_classifier(model, self.test_dataset)
 
-        #     test_df = self.get_test_df()
-        #     test_df = test_df[["PatientID"]]
-        #     test_df.columns = ["patientId"]
-        #     test_df["HasPnemonia"] = (probas > threshold).astype(int)
+            df = pd.DataFrame({'Predicted': probas})
+            df['Id'] = [60000000+(x-1) for x in range(len(df))]
+            df.to_csv(os.path.join(self.output_path, "submission.csv"), index=False)
 
-        #     test_df.to_csv(os.path.join(self.output_path, "submission_%.2f.csv" % threshold), index=False)
+
+def pred_probas_for_classifier(model: KerasModel, test_dataset):
+    probs = model.predict(test_dataset).reshape(-1)
+    print(probs[:3])
+    return probs
 
 
 def load_keras_model_from_task_dir(model_cls: Type[BaseKerasModelTraining], task_dir: str) -> BaseKerasModelTraining:

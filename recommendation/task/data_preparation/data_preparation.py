@@ -21,8 +21,8 @@ SEED = 42
 
 DATASET_DIR = "output/dataset"
 
-TRAIN_FILE  = "ctr_criteo_labs_train_sample.txt"
-
+TRAIN_FILE  = "train.txt"
+TEST_FILE   = "test.txt"
 
 # class DownloadDataset(luigi.Task):
 #     def output(self):
@@ -68,6 +68,7 @@ import category_encoders as ce
 class PrepareDataFrames(luigi.Task):
     val_size: float = luigi.FloatParameter(default=0.2)
     seed: int = luigi.IntParameter(default=42)
+    no_cross_columns: bool = luigi.BoolParameter(default=False)
 
     # def requires(self):
     #    return None
@@ -75,30 +76,81 @@ class PrepareDataFrames(luigi.Task):
     def output(self) -> Tuple[luigi.LocalTarget, luigi.LocalTarget, luigi.LocalTarget]:
         task_hash = self.task_id.split("_")[-1]
         return (luigi.LocalTarget(os.path.join(DATASET_DIR,
-                                               "train_%.2f_%d_%s.csv" % (
-                                                   self.val_size, self.seed, task_hash))),
+                                               "train_%.2f_%d_%d_%s.csv" % (
+                                                   self.val_size, self.seed, self.no_cross_columns, task_hash))),
                 luigi.LocalTarget(os.path.join(DATASET_DIR, 
-                                                "val_%.2f_%d_%s.csv" % (self.val_size, self.seed, task_hash))),
-                luigi.LocalTarget(os.path.join(DATASET_DIR, "test.csv")))
+                                                "val_%.2f_%d_%d_%s.csv" % (
+                                                    self.val_size, self.seed, self.no_cross_columns, task_hash))),
+                luigi.LocalTarget(os.path.join(DATASET_DIR, 
+                                                "test_%.2f_%d_%d_%s.csv" % (
+                                                    self.val_size, self.seed, self.no_cross_columns, task_hash))))
 
     def run(self):
-        df = pd.read_csv(os.path.join(DATASET_DIR, TRAIN_FILE), sep='\t', header=None)
-        df.columns = DATASET_COLUMNS
+        # Train Dataset
+        train_df = pd.read_csv(os.path.join(DATASET_DIR, TRAIN_FILE), sep='\t', header=None)
+        train_df.columns   = DATASET_COLUMNS
         
-        df = self.preprocess(df)
+        # Test Dataset
+        test_df = pd.read_csv(os.path.join(DATASET_DIR, TEST_FILE), sep='\t', header=None)
+        test_df.columns    = DATASET_COLUMNS[1:]
+        
+        # Preprocess Datasets
+        train_df, test_df  = self.preprocess(train_df, test_df)
 
-        train_df, val_df = train_test_split(df, test_size=self.val_size, random_state=self.seed)
+        # Sprint Val Dataset
+        train_df, val_df   = train_test_split(train_df, test_size=self.val_size, random_state=self.seed)
 
         train_df.to_csv(self.output()[0].path, sep=";", index=False)
         val_df.to_csv(self.output()[1].path, sep=";", index=False)
+        test_df.to_csv(self.output()[2].path, sep=";", index=False)
+        
 
+    def preprocess(self, df, test_df = None):
+        print(df.describe(include = ['object', 'float', 'int']))
 
-    def preprocess(self, df):
+        categorical_columns = list(df.select_dtypes(include=['object']).columns)
+
+        if not self.no_cross_columns:
+            # my understanding on how to replicate what layers.crossed_column does. One
+            # can read here: https://www.tensorflow.org/tutorials/linear.
+            df = self.cross_columns(df, categorical_columns)
+            
+        # Encoder categorical Columns
+        #
+        df, test_df = self.encoder_categorical_columns(df, test_df)
+
         print(df.info())
+
+        return df, test_df
+
+    def encoder_categorical_columns(self, df, test_df = None):
+        """
+        Encoder Categorical Columns
+        """
+
+        # Categorical Columns After Cross
+        categorical_columns = list(df.select_dtypes(include=['object']).columns)
+
         # encoder = ce.OneHotEncoder(cols=list(df.select_dtypes(include=['object']).columns),
         #                             use_cat_names=True, drop_invariant=True )
 
-        encoder = ce.OrdinalEncoder(cols=list(df.select_dtypes(include=['object']).columns))
-        df_t    = encoder.fit_transform(df)
+        encoder = ce.OrdinalEncoder(cols=categorical_columns)
+        df_t    = encoder.fit_transform(df[DATASET_COLUMNS[1:]])
 
-        return df_t
+        if test_df is not None:
+            test_df = encoder.transform(test_df)
+
+        df_t['TARGET'] = df['TARGET']
+
+        return df_t, test_df
+
+    def cross_columns(self, df, x_cols):
+        """simple helper to build the crossed columns in a pandas dataframe
+        """
+        for c1 in x_cols:
+            for c2 in x_cols:
+                if c1 != c2:
+                    df["{}_{}".format(c1, c2)] = df.apply(lambda row: "{}_{}".format(row[c1], row[c2]), axis=1)
+
+        return df
+
