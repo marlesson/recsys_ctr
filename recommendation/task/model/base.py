@@ -182,7 +182,6 @@ class BaseKerasModelTraining(BaseModelTraining):
     kernel_regularizer: str = luigi.ChoiceParameter(choices=KERAS_REGULARIZERS.keys(), default=None)
     kernel_regularizer_value: float = luigi.FloatParameter(default=0.01)
 
-    @abc.abstractmethod
     def create_model(self) -> KerasModel:
         """Retornar um modelo do Keras"""
         pass
@@ -229,6 +228,8 @@ class BaseKerasModelTraining(BaseModelTraining):
 
                 self.keras_model.compile(optimizer=self._get_optimizer(), loss=self._get_loss_function(),
                                          metrics=metrics)
+
+                print(self.keras_model.summary())
 
                 with open("%s/summary.txt" % self.output_path, "w") as summary_file:
                     with redirect_stdout(summary_file):
@@ -293,12 +294,12 @@ class BaseKerasModelTraining(BaseModelTraining):
         return (df_X, df_Y)
 
     def get_test_generator(self):
-        df   = self.val_dataset
+        df   = self.test_dataset
 
-        df_Y = df['TARGET'] 
-        df_X = df.drop(['TARGET'], axis=1)
+        #df_Y = df['TARGET'] 
+        #df_X = df.drop(['TARGET'], axis=1)
+        return df
 
-        return (df_X, df_Y)
     @property
     def train_generator(self):
         if not hasattr(self, "_train_generator"):
@@ -343,7 +344,7 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
     @abc.abstractmethod
     def create_model_with(self, base_model: KerasModel) -> KerasModel:
         """Retornar um modelo utilizando o modelo pré-treinado passado como parâmetro"""
-        pass
+        return KerasModel
 
     def create_model(self) -> KerasModel:
         self.base_model  = self.create_base_model()
@@ -359,45 +360,6 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
 
         self.generate_submission_file()
 
-        # self.eval_thresholds(model)
-        # test_probas = pred_probas_for_classifier(model, self.test_generator)
-        # for score_threshold in self.score_thresholds_to_eval:
-        #     self.generate_submission_file(probas=test_probas, threshold=score_threshold)
-
-    # def eval_thresholds(self, model: KerasModel = None) -> pd.DataFrame:
-    #     with self.tensorflow_device:
-    #         if model is None:
-    #             model = self.get_trained_model()
-
-    #         results = []
-    #         train_probas = pred_probas_for_classifier(model, self.train_generator)
-    #         val_probas = pred_probas_for_classifier(model, self.val_generator)
-
-    #         for score_threshold in self.score_thresholds_to_eval:
-    #             train_report = evaluate_classifier(self.train_generator, probas=train_probas,
-    #                                                filenames=self.train_dataset.im_list,
-    #                                                ground_truths=self.train_dataset.labels, threshold=score_threshold)
-    #             val_report = evaluate_classifier(self.val_generator, probas=val_probas,
-    #                                              filenames=self.val_dataset.im_list,
-    #                                              ground_truths=self.val_dataset.labels, threshold=score_threshold)
-
-    #             results.append(
-    #                 OrderedDict(threshold=score_threshold, acc=train_report.acc, precision=train_report.precision,
-    #                             recall=train_report.recall, f1_score=train_report.f1_score, val_acc=val_report.acc,
-    #                             val_precision=val_report.precision, val_recall=val_report.recall,
-    #                             val_f1_score=val_report.f1_score,))
-
-
-    #             plot_confusion_matrix(train_report.confusion_matrix, CLASS_NAMES)\
-    #                 .savefig(os.path.join(self.output_path, "confusion_matrix_%.2f.png" % score_threshold))
-    #             plot_confusion_matrix(val_report.confusion_matrix, CLASS_NAMES) \
-    #                 .savefig(os.path.join(self.output_path, "val_confusion_matrix_%.2f.png" % score_threshold))
-
-    #         df = pd.DataFrame(results)
-    #         df.to_csv(os.path.join(self.output_path, "eval_thresholds.csv"), index=False)
-    #         return df
-
-
     # Id,Predicted
     # 60000000,0.361366158048
     # 60000001,0.619944481451
@@ -405,10 +367,10 @@ class ClassifierWithTransferLearningKerasModelTraining(BaseKerasModelTraining):
         with self.tensorflow_device:
             if model is None:
                 model  = self.get_trained_model()
-                probas = pred_probas_for_classifier(model, self.test_dataset)
+                probas = pred_probas_for_classifier(model, self.test_generator)
 
             df = pd.DataFrame({'Predicted': probas})
-            df['Id'] = [60000000+(x-1) for x in range(len(df))]
+            df['Id'] = [60000000+(x) for x in range(len(df))]
             df.to_csv(os.path.join(self.output_path, "submission.csv"), index=False)
 
 
